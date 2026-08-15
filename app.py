@@ -101,7 +101,7 @@ def check_duplicate(student_id, course_name):
 
 
 def save_to_gsheet(student_data):
-    """Save student data to Google Sheets."""
+    """Save student data to Google Sheets with headers."""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         if "google_credentials" in st.secrets:
@@ -112,6 +112,17 @@ def save_to_gsheet(student_data):
         client = gspread.authorize(creds)
         sheet = client.open("CogNet_Real_Data").sheet1
 
+        # Check if sheet is empty (no headers)
+        records = sheet.get_all_values()
+        if len(records) == 0:
+            # Write headers
+            headers = [
+                "Timestamp", "Student_ID", "University", "Degree", "Year",
+                "GPA", "Course_Taken", "Visual", "Sensing", "Active", "Global", "Final_Grade"
+            ]
+            sheet.append_row(headers)
+
+        # Write data row
         row = [
             datetime.datetime.now().isoformat(),
             student_data["name"],
@@ -123,7 +134,8 @@ def save_to_gsheet(student_data):
             student_data["visual"],
             student_data["sensing"],
             student_data["active"],
-            student_data["global"]
+            student_data["global"],
+            ""  # Final_Grade placeholder (to be filled later)
         ]
         sheet.append_row(row)
         return True
@@ -137,83 +149,87 @@ def save_to_gsheet(student_data):
 # ============================================================
 
 st.set_page_config(page_title="CogNet Advisor - Data Collection", layout="wide")
-st.title("📚 CogNet Advisor")
+st.title("CogNet Advisor")
 st.markdown("*Learning Style Assessment for Course Recommendation Research*")
 
 st.info("""
 This survey collects your learning preferences (FSLSM) and academic background.
-Your responses are **anonymous** and will only be used for research purposes.
+Your responses are anonymous and will only be used for research purposes.
 """)
 
 # --- Student Information Form ---
-st.subheader("👤 Your Academic Background")
+st.subheader("Academic Background")
 col1, col2 = st.columns(2)
 with col1:
-    name = st.text_input("Your Name / Unique ID", placeholder="e.g., Student_001")
+    name = st.text_input("Student Name / Unique ID", placeholder="e.g., Student_001")
     university = st.text_input("University / Institute")
     degree = st.text_input("Degree Program", placeholder="e.g., BS Computer Science")
 with col2:
     year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"])
     gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01)
-    course_taken = st.text_input("Course you are taking / planning to take", placeholder="e.g., Artificial Intelligence")
+    course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence")
 
 if not name or not course_taken:
-    st.warning("⚠️ Please enter your Name/ID and Course Name to proceed.")
+    st.warning("Please enter your Student ID and Course Name to proceed.")
     st.stop()
 
-# --- FSLSM Assessment ---
-st.subheader("🧠 Learning Style Preferences (44 Questions)")
-st.markdown("Choose the option **(a)** or **(b)** that best describes you.")
+# --- FSLSM Assessment (All 44 Questions on One Page) ---
+st.subheader("Learning Style Preferences (44 Questions)")
+st.markdown("Please answer all questions. Choose the option **(a)** or **(b)** that best describes you.")
 
-# Initialize session state
-if "q_index" not in st.session_state:
-    st.session_state.q_index = 0
+# Initialize session state for answers
 if "answers" not in st.session_state:
     st.session_state.answers = []
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
+if "profile" not in st.session_state:
+    st.session_state.profile = None
 
 if st.session_state.submitted:
-    st.success("✅ You have already submitted your responses for this course. Thank you!")
+    st.success("You have already submitted your responses for this course. Thank you!")
     st.stop()
 
-if st.session_state.q_index < len(FSLSM_QUESTIONS):
-    q_text, dim, pole = FSLSM_QUESTIONS[st.session_state.q_index]
+# Display all questions
+answers = []
+for i, (q_text, dim, pole) in enumerate(FSLSM_QUESTIONS):
     clean_q = q_text.replace("(a)", "").replace("(b)", "").strip()
-    st.progress(st.session_state.q_index / len(FSLSM_QUESTIONS))
-    st.write(f"**Question {st.session_state.q_index + 1} of {len(FSLSM_QUESTIONS)}**")
-    st.write(clean_q)
-
-    # Extract options
     parts = q_text.split("(a)")[1].split("(b)")
     choice_a = "(a) " + parts[0].strip()
     choice_b = "(b) " + parts[1].strip()
-
+    
+    # Use a unique key for each question
     choice = st.radio(
-        "Select your preference:",
+        f"Question {i+1}. {clean_q}",
         [choice_a, choice_b],
-        key=f"q{st.session_state.q_index}"
+        key=f"q_{i}",
+        index=None
     )
+    answers.append(choice)
 
-    if st.button("Next →"):
+# Check if all questions are answered
+all_answered = all(a is not None for a in answers)
+
+if not all_answered:
+    st.warning("Please answer all 44 questions before submitting.")
+else:
+    # Compute profile
+    profile_answers = []
+    for i, (q_text, dim, pole) in enumerate(FSLSM_QUESTIONS):
+        choice = answers[i]
         selected = "a" if choice.startswith("(a)") else "b"
         delta = 1 if selected == pole else -1
-        st.session_state.answers.append((dim, delta))
-        st.session_state.q_index += 1
-        st.rerun()
+        profile_answers.append((dim, delta))
+    
+    profile = compute_profile(profile_answers)
+    st.session_state.profile = profile
 
-else:
-    # All questions answered → compute profile and offer submission
-    profile = compute_profile(st.session_state.answers)
-
-    st.balloons()
-    st.subheader("📊 Your Learning Profile")
+    st.markdown("---")
+    st.subheader("Your Learning Profile")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Visual", f"{profile['visual']:.3f}")
     col2.metric("Sensing", f"{profile['sensing']:.3f}")
     col3.metric("Active", f"{profile['active']:.3f}")
     col4.metric("Global", f"{profile['global']:.3f}")
-
     st.caption("Higher scores indicate a stronger preference for that learning style.")
     st.markdown("---")
 
@@ -231,20 +247,19 @@ else:
         "global": profile['global']
     }
 
-    if st.button("✅ Submit My Responses to Researcher", type="primary"):
+    if st.button("Submit Response", type="primary"):
         if check_duplicate(name, course_taken):
-            st.error(f"❌ You have already submitted a response for **'{course_taken}'** under **{name}**. Please select a different course for this submission.")
-            st.info("💡 If you are taking multiple courses, complete this survey separately for each course.")
+            st.error(f"You have already submitted a response for '{course_taken}' under {name}. Please select a different course for this submission.")
+            st.info("If you are taking multiple courses, complete this survey separately for each course.")
         else:
             if save_to_gsheet(student_data):
                 st.session_state.submitted = True
-                st.success("✅ Your responses have been saved successfully! Thank you for contributing to our research.")
-                st.balloons()
+                st.success("Your responses have been saved successfully. Thank you for contributing to our research.")
             else:
                 st.error("Failed to save. Please ensure Google Sheets setup is correct.")
 
     # Allow CSV download for local backup
-    if st.button("⬇️ Download CSV (Local Backup)"):
+    if st.button("Download CSV (Local Backup)"):
         import pandas as pd
         df = pd.DataFrame([student_data])
         csv = df.to_csv(index=False)
