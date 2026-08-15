@@ -1,0 +1,11 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Local secrets (NEVER upload this to GitHub!)
+credentials.json
+*.json
+
+# Streamlit cache
+.streamlit/
+.cache/
