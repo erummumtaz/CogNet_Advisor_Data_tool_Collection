@@ -199,7 +199,7 @@ for i, (q_text, dim, pole) in enumerate(FSLSM_QUESTIONS):
     
     # Use a unique key for each question
     choice = st.radio(
-        f"Question {i+1}. {clean_q}",
+        f"**Question {i+1}. {clean_q}**",
         [choice_a, choice_b],
         key=f"q_{i}",
         index=None
