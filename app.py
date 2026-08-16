@@ -335,16 +335,21 @@ if st.session_state.submitted:
         st.session_state.answers = []
         st.session_state.profile = None
         
-        # Clear the course name
-        st.session_state.course_input = ""
+        # --- Safe reset for course input (only if key exists) ---
+        if "course_input" in st.session_state:
+            st.session_state.course_input = ""
         
-        # Reset the course content sliders to 50%
-        st.session_state.c_vis_slider = 50
-        st.session_state.c_prac_slider = 50
-        st.session_state.c_struct_slider = 50
+        # --- Safe reset for sliders ---
+        if "c_vis_slider" in st.session_state:
+            st.session_state.c_vis_slider = 50
+        if "c_prac_slider" in st.session_state:
+            st.session_state.c_prac_slider = 50
+        if "c_struct_slider" in st.session_state:
+            st.session_state.c_struct_slider = 50
         
-        # Reset grade format and inputs
-        st.session_state.grade_format = "Percentage (0-100%)"
+        # --- Reset grade format and inputs ---
+        if "grade_format" in st.session_state:
+            st.session_state.grade_format = "Percentage (0-100%)"
         if "grade_input_num" in st.session_state:
             st.session_state.grade_input_num = 0.0
         if "grade_input_letter" in st.session_state:
