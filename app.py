@@ -84,7 +84,7 @@ def check_duplicate(student_id, course_name):
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 
         client = gspread.authorize(creds)
-        sheet = client.open("CogNet_Advisory_Data").sheet1
+        sheet = client.open("CogNet_Real_Data").sheet1
         records = sheet.get_all_values()
 
         if len(records) <= 1:
@@ -134,7 +134,7 @@ def save_to_gsheet(student_data):
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 
         client = gspread.authorize(creds)
-        sheet = client.open("CogNet_Advisory_Data").sheet1
+        sheet = client.open("CogNet_Real_Data").sheet1
 
         # Check if sheet is empty (no headers)
         records = sheet.get_all_values()
@@ -321,8 +321,22 @@ if "submitted" not in st.session_state:
 if "profile" not in st.session_state:
     st.session_state.profile = None
 
+# --- Handle submitted state with "Submit Another Response" button ---
 if st.session_state.submitted:
-    st.success("You have already submitted your responses for this course. Thank you!")
+    st.success("Your responses have been saved successfully. Thank you for contributing to our research!")
+    st.info("If you are taking another course, you can submit another response.")
+    
+    if st.button("Submit Another Response", type="primary"):
+        # Reset session state
+        st.session_state.submitted = False
+        st.session_state.answers = []
+        st.session_state.profile = None
+        # Clear radio button widget states
+        keys_to_remove = [k for k in st.session_state.keys() if k.startswith('q_')]
+        for k in keys_to_remove:
+            del st.session_state[k]
+        st.rerun()
+    
     st.stop()
 
 # Display all questions
@@ -402,7 +416,7 @@ else:
         else:
             if save_to_gsheet(student_data):
                 st.session_state.submitted = True
-                st.success("Your responses have been saved successfully. Thank you for contributing to our research!")
+                st.rerun()
             else:
                 st.error("Failed to save. Please ensure Google Sheets setup is correct.")
 
