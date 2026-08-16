@@ -197,7 +197,7 @@ with col1:
 with col2:
     year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"])
     gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01)
-    course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence")
+    course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence", key="course_input")
 
 # --- Course Content Rating ---
 st.subheader("Course Content Assessment")
@@ -267,7 +267,8 @@ if grade_format == "4.0 GPA Scale":
         min_value=0.0,
         max_value=4.0,
         step=0.01,
-        value=0.0
+        value=0.0,
+        key="grade_input_num"
     )
     normalized_grade = grade_input / 4.0
     if grade_input > 0:
@@ -281,7 +282,8 @@ elif grade_format == "Percentage (0-100%)":
         min_value=0.0,
         max_value=100.0,
         step=0.5,
-        value=0.0
+        value=0.0,
+        key="grade_input_num"
     )
     normalized_grade = grade_input / 100.0
     if grade_input > 0:
@@ -293,7 +295,8 @@ else:  # Letter Grade
     grade_input = st.text_input(
         "Your Letter Grade",
         placeholder="e.g., A, B+, C-",
-        value=""
+        value="",
+        key="grade_input_letter"
     )
     if grade_input:
         normalized_grade = convert_grade(grade_input, grade_format)
@@ -327,14 +330,31 @@ if st.session_state.submitted:
     st.info("If you are taking another course, you can submit another response.")
     
     if st.button("Submit Another Response", type="primary"):
-        # Reset session state
+        # Reset all course-specific fields
         st.session_state.submitted = False
         st.session_state.answers = []
         st.session_state.profile = None
-        # Clear radio button widget states
+        
+        # Clear the course name
+        st.session_state.course_input = ""
+        
+        # Reset the course content sliders to 50%
+        st.session_state.c_vis_slider = 50
+        st.session_state.c_prac_slider = 50
+        st.session_state.c_struct_slider = 50
+        
+        # Reset grade format and inputs
+        st.session_state.grade_format = "Percentage (0-100%)"
+        if "grade_input_num" in st.session_state:
+            st.session_state.grade_input_num = 0.0
+        if "grade_input_letter" in st.session_state:
+            st.session_state.grade_input_letter = ""
+        
+        # Clear all FSLSM radio button selections
         keys_to_remove = [k for k in st.session_state.keys() if k.startswith('q_')]
         for k in keys_to_remove:
             del st.session_state[k]
+        
         st.rerun()
     
     st.stop()
