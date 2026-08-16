@@ -5,6 +5,11 @@ import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ============================================================
+# CONFIGURATION
+# ============================================================
+MIN_COURSE_LENGTH = 4  # Prevents acronyms like "OOP", "AI", "ML" from being submitted.
+
+# ============================================================
 # FSLSM QUESTION BANK (44 items - COMPLETE)
 # ============================================================
 
@@ -153,7 +158,8 @@ def check_duplicate(student_id, course_name):
             return False
 
         for row in records[1:]:
-            if len(row) > 6:
+            if len(row) > 6: # Ensure columns exist
+                # row[1] is Student_ID, row[6] is Course_Taken
                 if row[1].strip().lower() == student_id.strip().lower() and row[6].strip().lower() == course_name.strip().lower():
                     return True
         return False
@@ -267,7 +273,13 @@ with col2:
     degree = st.text_input("Degree Program", placeholder="e.g., BS Computer Science", key="input_degree")
     year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"], key="input_year")
     gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01, key="input_gpa")
-    course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence", key="input_course_taken")
+    
+    course_taken = st.text_input("Course Name", placeholder="e.g., Object Oriented Programming", key="input_course_taken")
+    
+    # Minimum Course Name Length Validation
+    if course_taken and len(course_taken.strip()) < MIN_COURSE_LENGTH:
+        st.warning(f"⚠️ Course name must be at least **{MIN_COURSE_LENGTH}** characters. (e.g., 'Object Oriented Programming')")
+        st.caption("Acronyms like 'OOP' are not allowed to ensure data clarity.")
 
 # --- Course Content Rating ---
 st.subheader("Course Content Assessment")
@@ -444,6 +456,7 @@ for i, (q_text, dim, pole) in enumerate(FSLSM_QUESTIONS):
 
 # Check if all questions are answered
 all_answered = all(a is not None for a in answers)
+course_valid = len(course_taken.strip()) >= MIN_COURSE_LENGTH
 
 if not all_answered:
     st.warning("Please answer all 44 questions before submitting.")
@@ -469,102 +482,93 @@ else:
     st.caption("Higher scores indicate a stronger preference for that learning style.")
     st.markdown("---")
 
-    # --- Submit to Google Sheets ---
-    student_data = {
-        "name": name,
-        "username": username,
-        "university": university,
-        "degree": degree,
-        "year": year,
-        "gpa": gpa,
-        "course_taken": course_taken,
-        "visual": profile['visual'],
-        "sensing": profile['sensing'],
-        "active": profile['active'],
-        "global": profile['global'],
-        "c_vis": c_vis,
-        "c_prac": c_prac,
-        "c_struct": c_struct,
-        "final_grade": normalized_grade
-    }
+# Prepare student data (even if not all answered, we'll wait for submit)
+student_data = {
+    "name": name,
+    "username": username,
+    "university": university,
+    "degree": degree,
+    "year": year,
+    "gpa": gpa,
+    "course_taken": course_taken,
+    "visual": profile['visual'] if all_answered else 0.0,
+    "sensing": profile['sensing'] if all_answered else 0.0,
+    "active": profile['active'] if all_answered else 0.0,
+    "global": profile['global'] if all_answered else 0.0,
+    "c_vis": c_vis,
+    "c_prac": c_prac,
+    "c_struct": c_struct,
+    "final_grade": normalized_grade
+}
 
-    # Show summary before submission
-    with st.expander("Review Your Responses Before Submitting"):
-        st.write("**Course Ratings:**")
-        st.write(f"- Visual Content: {c_vis_raw}% → Normalized: {c_vis:.2f}")
-        st.write(f"- Practical Content: {c_prac_raw}% → Normalized: {c_prac:.2f}")
-        st.write(f"- Structure/Organization: {c_struct_raw}% → Normalized: {c_struct:.2f}")
-        st.write(f"- Final Grade: {normalized_grade:.3f} (0-1 scale)")
+# Show summary before submission
+with st.expander("Review Your Responses Before Submitting"):
+    st.write("**Course Ratings:**")
+    st.write(f"- Visual Content: {c_vis_raw}% → Normalized: {c_vis:.2f}")
+    st.write(f"- Practical Content: {c_prac_raw}% → Normalized: {c_prac:.2f}")
+    st.write(f"- Structure/Organization: {c_struct_raw}% → Normalized: {c_struct:.2f}")
+    st.write(f"- Final Grade: {normalized_grade:.3f} (0-1 scale)")
 
-    # ============================================
-    # ACTION BUTTONS SECTION
-    # ============================================
-    col_action1, col_action2, col_action3 = st.columns(3)
+# ============================================
+# ACTION BUTTONS SECTION (Always Visible)
+# ============================================
+st.markdown("---")
+col_action1, col_action2, col_action3 = st.columns(3)
+
+with col_action1:
+    # The submit button will be grayed out if the course name is too short OR if questions are missing
+    submit_disabled = (not all_answered) or (not course_valid)
     
-    with col_action1:
-        if st.button("Submit Response", type="primary", use_container_width=True):
-            if check_duplicate(name, course_taken):
-                st.error(f"You have already submitted a response for '{course_taken}' under {name}. Please select a different course for this submission.")
-                st.info("If you are taking multiple courses, complete this survey separately for each course.")
-            else:
-                if save_to_gsheet(student_data):
-                    st.session_state.submitted = True
-                    st.rerun()
-                else:
-                    st.error("Failed to save. Please ensure Google Sheets setup is correct.")
-
-    with col_action2:
-        if st.button("Clear All Fields", type="secondary", use_container_width=True):
-            # Reset app states
-            st.session_state.submitted = False
-            st.session_state.answers = []
-            st.session_state.profile = None
-            
-            # Delete all widget keys
-            widget_keys_to_clear = [
-                "input_name", "input_username", "input_university", "input_degree", 
-                "input_year", "input_gpa", "input_course_taken", 
-                "c_vis_slider", "c_prac_slider", "c_struct_slider", 
-                "grade_format", "grade_input_num", "grade_input_letter"
-            ]
-            for key in widget_keys_to_clear:
-                if key in st.session_state:
-                    del st.session_state[key]
-            
-            # Clear radio buttons
-            keys_to_remove = [k for k in st.session_state.keys() if k.startswith('q_')]
-            for k in keys_to_remove:
-                del st.session_state[k]
-                
-            st.rerun()
-
-    with col_action3:
-        # Allow user to download ALL their historical responses (filtered by username)
-        if username:
-            user_history_df = get_user_history_dataframe(username)
-            if not user_history_df.empty:
-                csv_history = user_history_df.to_csv(index=False)
-                st.download_button(
-                    label="Download My History (CSV)",
-                    data=csv_history,
-                    file_name=f"{username}_history.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            else:
-                st.button("No History Found", disabled=True, use_container_width=True)
+    if st.button("Submit Response", type="primary", use_container_width=True, disabled=submit_disabled):
+        if check_duplicate(name, course_taken):
+            st.error(f"🚫 Duplicate entry: You have already submitted a response for '{course_taken}' under student ID '{name}'.")
+            st.info("If you are taking multiple courses, complete this survey separately for each course.")
         else:
-            st.button("Enter Username for History", disabled=True, use_container_width=True)
+            if save_to_gsheet(student_data):
+                st.session_state.submitted = True
+                st.rerun()
+            else:
+                st.error("Failed to save. Please ensure Google Sheets setup is correct.")
 
-    st.divider()
+with col_action2:
+    if st.button("Clear All Fields", type="secondary", use_container_width=True):
+        # Reset app states
+        st.session_state.submitted = False
+        st.session_state.answers = []
+        st.session_state.profile = None
+        
+        # Delete all widget keys
+        widget_keys_to_clear = [
+            "input_name", "input_username", "input_university", "input_degree", 
+            "input_year", "input_gpa", "input_course_taken", 
+            "c_vis_slider", "c_prac_slider", "c_struct_slider", 
+            "grade_format", "grade_input_num", "grade_input_letter"
+        ]
+        for key in widget_keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        
+        # Clear radio buttons
+        keys_to_remove = [k for k in st.session_state.keys() if k.startswith('q_')]
+        for k in keys_to_remove:
+            del st.session_state[k]
+            
+        st.rerun()
 
-    # Allow CSV download for the SINGLE current response (backup/local only)
-    if st.button("Download Current Response (Local Backup)", use_container_width=True):
-        df = pd.DataFrame([student_data])
-        csv = df.to_csv(index=False)
-        st.download_button(
-            label="Download CSV File",
-            data=csv,
-            file_name="my_current_fslsm_profile.csv",
-            mime="text/csv"
-        )
+with col_action3:
+    # Allow user to download ALL their historical responses (filtered by username)
+    if username:
+        user_history_df = get_user_history_dataframe(username)
+        if not user_history_df.empty:
+            csv_history = user_history_df.to_csv(index=False)
+            st.download_button(
+                label="Download My History (CSV)",
+                data=csv_history,
+                file_name=f"{username}_history.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        else:
+            st.button("No History Found", disabled=True, use_container_width=True)
+    else:
+        st.button("Enter Username for History", disabled=True, use_container_width=True)
