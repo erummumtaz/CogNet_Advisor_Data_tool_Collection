@@ -197,7 +197,19 @@ with col1:
 with col2:
     year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"])
     gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01)
-    course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence", key="course_input")
+
+# --- COURSE NAME (Using session state variable without widget key) ---
+# Initialize course name in session state
+if "course_name" not in st.session_state:
+    st.session_state.course_name = ""
+
+course_taken = st.text_input(
+    "Course Name",
+    value=st.session_state.course_name,
+    placeholder="e.g., Artificial Intelligence"
+)
+# Update session state when user types
+st.session_state.course_name = course_taken
 
 # --- Course Content Rating ---
 st.subheader("Course Content Assessment")
@@ -335,11 +347,10 @@ if st.session_state.submitted:
         st.session_state.answers = []
         st.session_state.profile = None
         
-        # --- Safe reset for course input (only if key exists) ---
-        if "course_input" in st.session_state:
-            st.session_state.course_input = ""
+        # Reset course name (using session state variable, not widget key)
+        st.session_state.course_name = ""
         
-        # --- Safe reset for sliders ---
+        # Reset sliders
         if "c_vis_slider" in st.session_state:
             st.session_state.c_vis_slider = 50
         if "c_prac_slider" in st.session_state:
@@ -347,7 +358,7 @@ if st.session_state.submitted:
         if "c_struct_slider" in st.session_state:
             st.session_state.c_struct_slider = 50
         
-        # --- Reset grade format and inputs ---
+        # Reset grade format and inputs
         if "grade_format" in st.session_state:
             st.session_state.grade_format = "Percentage (0-100%)"
         if "grade_input_num" in st.session_state:
