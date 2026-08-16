@@ -142,7 +142,9 @@ def save_to_gsheet(student_data):
             # Write headers
             headers = [
                 "Timestamp", "Student_ID", "University", "Degree", "Year",
-                "GPA", "Course_Taken", "Visual", "Sensing", "Active", "Global", "Final_Grade"
+                "GPA", "Course_Taken", "Visual", "Sensing", "Active", "Global",
+                "C_vis_Perceived", "C_prac_Perceived", "C_struct_Perceived",
+                "Final_Grade"
             ]
             sheet.append_row(headers)
 
@@ -159,6 +161,9 @@ def save_to_gsheet(student_data):
             student_data["sensing"],
             student_data["active"],
             student_data["global"],
+            student_data.get("c_vis", 0.0),
+            student_data.get("c_prac", 0.0),
+            student_data.get("c_struct", 0.0),
             student_data.get("final_grade", 0.0)
         ]
         sheet.append_row(row)
@@ -194,61 +199,106 @@ with col2:
     gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01)
     course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence")
 
-# --- Final Grade (Optional) ---
-st.subheader("Final Grade (Optional)")
+# --- Course Content Rating ---
+st.subheader("Course Content Assessment")
+st.caption("Rate the course you took/are taking on the following aspects. This helps us understand the course characteristics.")
 
-# Single checkbox to show/hide grade input
-enter_grade = st.checkbox("I have completed this course and know my final grade")
+col_rating1, col_rating2, col_rating3 = st.columns(3)
 
-if enter_grade:
-    st.caption("Please enter your grade in one of the formats below. It will be automatically converted to 0-1 scale.")
-    
-    grade_format = st.selectbox(
-        "Select your grade format:",
-        ["4.0 GPA Scale", "Percentage (0-100%)", "Letter Grade (A, B, C, etc.)"],
-        key="grade_format"
+with col_rating1:
+    st.markdown("**Visual Content**")
+    st.caption("Diagrams, charts, images, animations")
+    c_vis_raw = st.slider(
+        "Visual Content (%)",
+        min_value=0,
+        max_value=100,
+        value=50,
+        step=5,
+        key="c_vis_slider"
     )
+    c_vis = c_vis_raw / 100.0
+    st.caption(f"Normalized: {c_vis:.2f}")
+
+with col_rating2:
+    st.markdown("**Practical Content**")
+    st.caption("Hands-on, lab, programming, projects")
+    c_prac_raw = st.slider(
+        "Practical Content (%)",
+        min_value=0,
+        max_value=100,
+        value=50,
+        step=5,
+        key="c_prac_slider"
+    )
+    c_prac = c_prac_raw / 100.0
+    st.caption(f"Normalized: {c_prac:.2f}")
+
+with col_rating3:
+    st.markdown("**Structure/Organization**")
+    st.caption("Clear weekly plan, learning objectives")
+    c_struct_raw = st.slider(
+        "Structure/Organization (%)",
+        min_value=0,
+        max_value=100,
+        value=50,
+        step=5,
+        key="c_struct_slider"
+    )
+    c_struct = c_struct_raw / 100.0
+    st.caption(f"Normalized: {c_struct:.2f}")
+
+# --- Final Grade (Mandatory - Default 0.00) ---
+st.subheader("Final Grade")
+st.caption("Please enter your grade in one of the formats below. If your semester has not ended, enter 0.00.")
+
+grade_format = st.selectbox(
+    "Select your grade format:",
+    ["Percentage (0-100%)", "4.0 GPA Scale", "Letter Grade (A, B, C, etc.)"],
+    key="grade_format"
+)
+
+if grade_format == "4.0 GPA Scale":
+    grade_input = st.number_input(
+        "Your GPA (0.00 - 4.00)",
+        min_value=0.0,
+        max_value=4.0,
+        step=0.01,
+        value=0.0
+    )
+    normalized_grade = grade_input / 4.0
     
-    if grade_format == "4.0 GPA Scale":
-        grade_input = st.number_input(
-            "Your GPA (0.00 - 4.00)",
-            min_value=0.0,
-            max_value=4.0,
-            step=0.01,
-            value=0.0
-        )
-        normalized_grade = grade_input / 4.0 if grade_input > 0 else 0.0
-        
-    elif grade_format == "Percentage (0-100%)":
-        grade_input = st.number_input(
-            "Your Percentage (0 - 100)",
-            min_value=0.0,
-            max_value=100.0,
-            step=0.5,
-            value=0.0
-        )
-        normalized_grade = grade_input / 100.0 if grade_input > 0 else 0.0
-        
-    else:  # Letter Grade
-        grade_input = st.text_input(
-            "Your Letter Grade",
-            placeholder="e.g., A, B+, C-",
-            value=""
-        )
-        if grade_input:
-            normalized_grade = convert_grade(grade_input, grade_format)
-        else:
-            normalized_grade = 0.0
+elif grade_format == "Percentage (0-100%)":
+    grade_input = st.number_input(
+        "Your Percentage (0 - 100)",
+        min_value=0.0,
+        max_value=100.0,
+        step=0.5,
+        value=0.0
+    )
+    normalized_grade = grade_input / 100.0
     
-    # Show conversion result
-    if grade_input and (grade_format != "Letter Grade" or grade_input):
-        if normalized_grade > 0:
-            st.success(f"✅ Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
-        else:
-            st.warning("⚠️ Please enter a valid grade.")
+else:  # Letter Grade
+    grade_input = st.text_input(
+        "Your Letter Grade",
+        placeholder="e.g., A, B+, C-",
+        value=""
+    )
+    if grade_input:
+        normalized_grade = convert_grade(grade_input, grade_format)
+    else:
+        normalized_grade = 0.0
+
+# Show conversion result
+if grade_format != "Letter Grade":
+    if grade_input > 0:
+        st.success(f"Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
+    else:
+        st.info("Enter 0.00 if the semester has not ended yet.")
 else:
-    normalized_grade = 0.0
-    st.caption("If you haven't completed this course yet, leave this unchecked. You can provide your grade later.")
+    if grade_input:
+        st.success(f"Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
+    else:
+        st.info("Enter your letter grade or leave empty if semester has not ended.")
 
 if not name or not course_taken:
     st.warning("Please enter your Student ID and Course Name to proceed.")
@@ -326,8 +376,19 @@ else:
         "sensing": profile['sensing'],
         "active": profile['active'],
         "global": profile['global'],
+        "c_vis": c_vis,
+        "c_prac": c_prac,
+        "c_struct": c_struct,
         "final_grade": normalized_grade
     }
+
+    # Show summary before submission
+    with st.expander("Review Your Responses Before Submitting"):
+        st.write("**Course Ratings:**")
+        st.write(f"- Visual Content: {c_vis_raw}% → Normalized: {c_vis:.2f}")
+        st.write(f"- Practical Content: {c_prac_raw}% → Normalized: {c_prac:.2f}")
+        st.write(f"- Structure/Organization: {c_struct_raw}% → Normalized: {c_struct:.2f}")
+        st.write(f"- Final Grade: {normalized_grade:.3f} (0-1 scale)")
 
     if st.button("Submit Response", type="primary"):
         if check_duplicate(name, course_taken):
@@ -336,9 +397,7 @@ else:
         else:
             if save_to_gsheet(student_data):
                 st.session_state.submitted = True
-                st.success("Your responses have been saved successfully. Thank you for contributing to our research.")
-                if normalized_grade > 0:
-                    st.caption(f"Your final grade was saved as: {normalized_grade:.3f} (0-1 scale)")
+                st.success("Your responses have been saved successfully. Thank you for contributing to our research!")
             else:
                 st.error("Failed to save. Please ensure Google Sheets setup is correct.")
 
