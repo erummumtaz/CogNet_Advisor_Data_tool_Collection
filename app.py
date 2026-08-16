@@ -74,6 +74,32 @@ def compute_profile(answers):
     }
 
 
+def get_submission_count(username):
+    """Return the number of times this username has submitted."""
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        if "google_credentials" in st.secrets:
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["google_credentials"], scope)
+        else:
+            creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+
+        client = gspread.authorize(creds)
+        sheet = client.open("CogNet_Advisory_Data").sheet1
+        records = sheet.get_all_values()
+
+        if len(records) <= 1:
+            return 0
+        
+        # Count rows where the username matches (last column index, -1 because appended at the end)
+        count = 0
+        for row in records[1:]:
+            if len(row) > 0 and row[-1].strip().lower() == username.strip().lower():
+                count += 1
+        return count
+    except Exception:
+        return 0
+
+
 def check_duplicate(student_id, course_name):
     """Check if this student has already submitted this course."""
     try:
@@ -139,12 +165,12 @@ def save_to_gsheet(student_data):
         # Check if sheet is empty (no headers)
         records = sheet.get_all_values()
         if len(records) == 0:
-            # Write headers
+            # Write headers (Appended Username at the end)
             headers = [
                 "Timestamp", "Student_ID", "University", "Degree", "Year",
                 "GPA", "Course_Taken", "Visual", "Sensing", "Active", "Global",
                 "C_vis_Perceived", "C_prac_Perceived", "C_struct_Perceived",
-                "Final_Grade"
+                "Final_Grade", "Username" 
             ]
             sheet.append_row(headers)
 
@@ -164,7 +190,8 @@ def save_to_gsheet(student_data):
             student_data.get("c_vis", 0.0),
             student_data.get("c_prac", 0.0),
             student_data.get("c_struct", 0.0),
-            student_data.get("final_grade", 0.0)
+            student_data.get("final_grade", 0.0),
+            student_data.get("username", "")
         ]
         sheet.append_row(row)
         return True
@@ -192,9 +219,16 @@ st.subheader("Academic Background")
 col1, col2 = st.columns(2)
 with col1:
     name = st.text_input("Student Name / Unique ID", placeholder="e.g., Student_001")
+    username = st.text_input("Username (for tracking your responses)", placeholder="e.g., johndoe123")
+    
+    # Show student's submission count in real-time
+    if username:
+        count = get_submission_count(username)
+        st.caption(f"ℹ️ This username has submitted **{count}** response(s) so far.")
+
+with col2:
     university = st.text_input("University / Institute")
     degree = st.text_input("Degree Program", placeholder="e.g., BS Computer Science")
-with col2:
     year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"])
     gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01)
     course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence")
@@ -212,7 +246,7 @@ with col_rating1:
         "Visual Content (%)",
         min_value=0,
         max_value=100,
-        value=50,
+        value=56,  # Starts at 56 per your original request
         step=5,
         key="c_vis_slider"
     )
@@ -267,7 +301,8 @@ if grade_format == "4.0 GPA Scale":
         min_value=0.0,
         max_value=4.0,
         step=0.01,
-        value=0.0
+        value=0.0,
+        key="grade_input_num"
     )
     normalized_grade = grade_input / 4.0
     if grade_input > 0:
@@ -281,7 +316,8 @@ elif grade_format == "Percentage (0-100%)":
         min_value=0.0,
         max_value=100.0,
         step=0.5,
-        value=0.0
+        value=0.0,
+        key="grade_input_num"
     )
     normalized_grade = grade_input / 100.0
     if grade_input > 0:
@@ -293,7 +329,8 @@ else:  # Letter Grade
     grade_input = st.text_input(
         "Your Letter Grade",
         placeholder="e.g., A, B+, C-",
-        value=""
+        value="",
+        key="grade_input_letter"
     )
     if grade_input:
         normalized_grade = convert_grade(grade_input, grade_format)
@@ -327,14 +364,30 @@ if st.session_state.submitted:
     st.info("If you are taking another course, you can submit another response.")
     
     if st.button("Submit Another Response", type="primary"):
-        # Reset session state
+        # Reset session states
         st.session_state.submitted = False
         st.session_state.answers = []
         st.session_state.profile = None
-        # Clear radio button widget states
+        
+        # Reset specific widget keys so they truly go back to defaults
+        if "c_vis_slider" in st.session_state:
+            del st.session_state.c_vis_slider
+        if "c_prac_slider" in st.session_state:
+            del st.session_state.c_prac_slider
+        if "c_struct_slider" in st.session_state:
+            del st.session_state.c_struct_slider
+        if "grade_format" in st.session_state:
+            del st.session_state.grade_format
+        if "grade_input_num" in st.session_state:
+            del st.session_state.grade_input_num
+        if "grade_input_letter" in st.session_state:
+            del st.session_state.grade_input_letter
+            
+        # Clear radio buttons
         keys_to_remove = [k for k in st.session_state.keys() if k.startswith('q_')]
         for k in keys_to_remove:
             del st.session_state[k]
+            
         st.rerun()
     
     st.stop()
@@ -386,6 +439,7 @@ else:
     # --- Submit to Google Sheets ---
     student_data = {
         "name": name,
+        "username": username,
         "university": university,
         "degree": degree,
         "year": year,
