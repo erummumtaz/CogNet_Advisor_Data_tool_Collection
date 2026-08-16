@@ -257,6 +257,10 @@ grade_format = st.selectbox(
     key="grade_format"
 )
 
+# Initialize variables
+grade_input = None
+normalized_grade = 0.0
+
 if grade_format == "4.0 GPA Scale":
     grade_input = st.number_input(
         "Your GPA (0.00 - 4.00)",
@@ -266,7 +270,11 @@ if grade_format == "4.0 GPA Scale":
         value=0.0
     )
     normalized_grade = grade_input / 4.0
-    
+    if grade_input > 0:
+        st.success(f"Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
+    else:
+        st.info("Enter 0.00 if the semester has not ended yet.")
+
 elif grade_format == "Percentage (0-100%)":
     grade_input = st.number_input(
         "Your Percentage (0 - 100)",
@@ -276,7 +284,11 @@ elif grade_format == "Percentage (0-100%)":
         value=0.0
     )
     normalized_grade = grade_input / 100.0
-    
+    if grade_input > 0:
+        st.success(f"Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
+    else:
+        st.info("Enter 0.00 if the semester has not ended yet.")
+
 else:  # Letter Grade
     grade_input = st.text_input(
         "Your Letter Grade",
@@ -285,20 +297,13 @@ else:  # Letter Grade
     )
     if grade_input:
         normalized_grade = convert_grade(grade_input, grade_format)
+        if normalized_grade > 0:
+            st.success(f"Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
+        else:
+            st.warning("Please enter a valid letter grade (e.g., A, B+, C-).")
     else:
         normalized_grade = 0.0
-
-# Show conversion result
-if grade_format != "Letter Grade":
-    if grade_input > 0:
-        st.success(f"Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
-    else:
-        st.info("Enter 0.00 if the semester has not ended yet.")
-else:
-    if grade_input:
-        st.success(f"Your grade has been converted to: **{normalized_grade:.3f}** (0-1 scale)")
-    else:
-        st.info("Enter your letter grade or leave empty if semester has not ended.")
+        st.info("Leave empty if the semester has not ended yet.")
 
 if not name or not course_taken:
     st.warning("Please enter your Student ID and Course Name to proceed.")
