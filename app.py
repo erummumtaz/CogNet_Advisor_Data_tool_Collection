@@ -100,6 +100,39 @@ def check_duplicate(student_id, course_name):
         return False
 
 
+def convert_grade(grade_input, grade_format):
+    """Convert grade to 0-1 scale."""
+    if grade_format == "4.0 GPA Scale":
+        # Already on 0-4 scale, normalize to 0-1
+        return grade_input / 4.0
+    elif grade_format == "Percentage (0-100%)":
+        # Convert percentage to 0-1
+        return grade_input / 100.0
+    elif grade_format == "Letter Grade (A, B, C, etc.)":
+        # Letter grade mapping to 0-4 scale, then normalize to 0-1
+        letter_map = {
+            'A+': 4.0, 'A': 4.0, 'A-': 3.7,
+            'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+            'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+            'D+': 1.3, 'D': 1.0, 'D-': 0.7,
+            'F': 0.0
+        }
+        # Clean the input
+        letter = grade_input.strip().upper()
+        # Handle cases like "A" or "A-"
+        if '+' in letter:
+            letter = letter.replace('+', '+')
+        if '-' in letter:
+            letter = letter.replace('-', '-')
+        if letter in letter_map:
+            return letter_map[letter] / 4.0
+        else:
+            st.error(f"Unknown letter grade: {grade_input}. Please use A, B, C, etc.")
+            return 0.0
+    else:
+        return 0.0
+
+
 def save_to_gsheet(student_data):
     """Save student data to Google Sheets with headers."""
     try:
@@ -135,7 +168,7 @@ def save_to_gsheet(student_data):
             student_data["sensing"],
             student_data["active"],
             student_data["global"],
-            ""  # Final_Grade placeholder (to be filled later)
+            student_data.get("final_grade", 0.0)
         ]
         sheet.append_row(row)
         return True
@@ -159,6 +192,7 @@ Your responses are anonymous and will only be used for research purposes.
 
 # --- Student Information Form ---
 st.subheader("Academic Background")
+
 col1, col2 = st.columns(2)
 with col1:
     name = st.text_input("Student Name / Unique ID", placeholder="e.g., Student_001")
@@ -168,6 +202,68 @@ with col2:
     year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"])
     gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01)
     course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence")
+
+# --- Optional Final Grade with Format Selection ---
+st.subheader("Final Grade (Optional)")
+st.caption("If your semester has ended and you know your final grade, please enter it below. Otherwise, leave as 0.00.")
+
+col_g1, col_g2 = st.columns([1, 3])
+with col_g1:
+    semester_completed = st.checkbox("Has your semester ended?")
+
+with col_g2:
+    if semester_completed:
+        # Let student select their grade format
+        grade_format = st.selectbox(
+            "Select your grade format:",
+            ["4.0 GPA Scale", "Percentage (0-100%)", "Letter Grade (A, B, C, etc.)"]
+        )
+        
+        # Conversion guide
+        st.caption("**Conversion Guide:**")
+        if grade_format == "4.0 GPA Scale":
+            st.caption("Enter your GPA (e.g., 3.5, 2.8, 4.0)")
+            grade_input = st.number_input(
+                "Your GPA (0.00 - 4.00)",
+                min_value=0.0,
+                max_value=4.0,
+                step=0.01,
+                value=0.0
+            )
+        elif grade_format == "Percentage (0-100%)":
+            st.caption("Enter your percentage (e.g., 85, 72, 91)")
+            grade_input = st.number_input(
+                "Your Percentage (0 - 100)",
+                min_value=0.0,
+                max_value=100.0,
+                step=0.5,
+                value=0.0
+            )
+        else:  # Letter Grade
+            st.caption("Enter your letter grade (e.g., A, B+, C-)")
+            grade_input = st.text_input(
+                "Your Letter Grade",
+                placeholder="e.g., A, B+, C-",
+                value=""
+            )
+        
+        # Show what will be saved
+        if grade_format in ["4.0 GPA Scale", "Percentage (0-100%)"]:
+            if grade_format == "4.0 GPA Scale":
+                normalized = grade_input / 4.0
+            else:
+                normalized = grade_input / 100.0
+            if grade_input > 0:
+                st.caption(f"**Will be saved as:** {normalized:.3f} (normalized to 0-1 scale)")
+        else:  # Letter Grade
+            if grade_input:
+                normalized = convert_grade(grade_input, grade_format)
+                if normalized > 0:
+                    st.caption(f"**Will be saved as:** {normalized:.3f} (normalized to 0-1 scale)")
+    else:
+        grade_input = 0.0
+        grade_format = "4.0 GPA Scale"
+        st.info("You can enter your final grade later by contacting the researcher.")
 
 if not name or not course_taken:
     st.warning("Please enter your Student ID and Course Name to proceed.")
@@ -233,6 +329,16 @@ else:
     st.caption("Higher scores indicate a stronger preference for that learning style.")
     st.markdown("---")
 
+    # --- Calculate Final Grade ---
+    final_grade_value = 0.0
+    if semester_completed:
+        if grade_format == "Letter Grade (A, B, C, etc.)" and grade_input:
+            final_grade_value = convert_grade(grade_input, grade_format)
+        elif grade_format == "4.0 GPA Scale":
+            final_grade_value = grade_input / 4.0 if grade_input > 0 else 0.0
+        elif grade_format == "Percentage (0-100%)":
+            final_grade_value = grade_input / 100.0 if grade_input > 0 else 0.0
+
     # --- Submit to Google Sheets ---
     student_data = {
         "name": name,
@@ -244,7 +350,8 @@ else:
         "visual": profile['visual'],
         "sensing": profile['sensing'],
         "active": profile['active'],
-        "global": profile['global']
+        "global": profile['global'],
+        "final_grade": final_grade_value
     }
 
     if st.button("Submit Response", type="primary"):
@@ -255,6 +362,8 @@ else:
             if save_to_gsheet(student_data):
                 st.session_state.submitted = True
                 st.success("Your responses have been saved successfully. Thank you for contributing to our research.")
+                if final_grade_value > 0:
+                    st.caption(f"Your grade ({grade_format}) was saved as: {final_grade_value:.3f}")
             else:
                 st.error("Failed to save. Please ensure Google Sheets setup is correct.")
 
