@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
 import gspread
+import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ============================================================
@@ -90,7 +91,7 @@ def get_submission_count(username):
         if len(records) <= 1:
             return 0
         
-        # Count rows where the username matches (last column index, -1 because appended at the end)
+        # Count rows where the username matches (last column index)
         count = 0
         for row in records[1:]:
             if len(row) > 0 and row[-1].strip().lower() == username.strip().lower():
@@ -98,6 +99,41 @@ def get_submission_count(username):
         return count
     except Exception:
         return 0
+
+
+def get_user_history_dataframe(username):
+    """Fetch all rows from Google Sheets for a specific username and return a Pandas DataFrame."""
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        if "google_credentials" in st.secrets:
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["google_credentials"], scope)
+        else:
+            creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+
+        client = gspread.authorize(creds)
+        sheet = client.open("CogNet_Advisory_Data").sheet1
+        records = sheet.get_all_values()
+
+        if len(records) <= 1:
+            return pd.DataFrame()
+        
+        headers = records[0]
+        data_rows = records[1:]
+        
+        # Filter rows where the last column matches the username
+        filtered_rows = []
+        for row in data_rows:
+            if len(row) > 0 and row[-1].strip().lower() == username.strip().lower():
+                # Ensure row length matches headers to avoid pandas errors
+                if len(row) < len(headers):
+                    row = row + [''] * (len(headers) - len(row))
+                filtered_rows.append(row[:len(headers)])
+        
+        df = pd.DataFrame(filtered_rows, columns=headers)
+        return df
+    except Exception as e:
+        st.error(f"Error fetching history: {e}")
+        return pd.DataFrame()
 
 
 def check_duplicate(student_id, course_name):
@@ -218,8 +254,8 @@ st.subheader("Academic Background")
 
 col1, col2 = st.columns(2)
 with col1:
-    name = st.text_input("Student Name / Unique ID", placeholder="e.g., Student_001")
-    username = st.text_input("Username (for tracking your responses)", placeholder="e.g., johndoe123")
+    name = st.text_input("Student Name / Unique ID", placeholder="e.g., Student_001", key="input_name")
+    username = st.text_input("Username (for tracking your responses)", placeholder="e.g., johndoe123", key="input_username")
     
     # Show student's submission count in real-time
     if username:
@@ -227,11 +263,11 @@ with col1:
         st.caption(f"ℹ️ This username has submitted **{count}** response(s) so far.")
 
 with col2:
-    university = st.text_input("University / Institute")
-    degree = st.text_input("Degree Program", placeholder="e.g., BS Computer Science")
-    year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"])
-    gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01)
-    course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence")
+    university = st.text_input("University / Institute", key="input_university")
+    degree = st.text_input("Degree Program", placeholder="e.g., BS Computer Science", key="input_degree")
+    year = st.selectbox("Academic Year", [1, 2, 3, 4, 5, "MS", "PhD"], key="input_year")
+    gpa = st.number_input("Cumulative GPA (on a 4.0 scale)", min_value=0.0, max_value=4.0, step=0.01, key="input_gpa")
+    course_taken = st.text_input("Course Name", placeholder="e.g., Artificial Intelligence", key="input_course_taken")
 
 # --- Course Content Rating ---
 st.subheader("Course Content Assessment")
@@ -246,7 +282,7 @@ with col_rating1:
         "Visual Content (%)",
         min_value=0,
         max_value=100,
-        value=56,  # Starts at 56 per your original request
+        value=56,  # Starts at 56 per your request
         step=5,
         key="c_vis_slider"
     )
@@ -370,18 +406,15 @@ if st.session_state.submitted:
         st.session_state.profile = None
         
         # Reset specific widget keys so they truly go back to defaults
-        if "c_vis_slider" in st.session_state:
-            del st.session_state.c_vis_slider
-        if "c_prac_slider" in st.session_state:
-            del st.session_state.c_prac_slider
-        if "c_struct_slider" in st.session_state:
-            del st.session_state.c_struct_slider
-        if "grade_format" in st.session_state:
-            del st.session_state.grade_format
-        if "grade_input_num" in st.session_state:
-            del st.session_state.grade_input_num
-        if "grade_input_letter" in st.session_state:
-            del st.session_state.grade_input_letter
+        widget_keys_to_clear = [
+            "input_name", "input_username", "input_university", "input_degree", 
+            "input_year", "input_gpa", "input_course_taken", 
+            "c_vis_slider", "c_prac_slider", "c_struct_slider", 
+            "grade_format", "grade_input_num", "grade_input_letter"
+        ]
+        for key in widget_keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
             
         # Clear radio buttons
         keys_to_remove = [k for k in st.session_state.keys() if k.startswith('q_')]
@@ -463,25 +496,75 @@ else:
         st.write(f"- Structure/Organization: {c_struct_raw}% → Normalized: {c_struct:.2f}")
         st.write(f"- Final Grade: {normalized_grade:.3f} (0-1 scale)")
 
-    if st.button("Submit Response", type="primary"):
-        if check_duplicate(name, course_taken):
-            st.error(f"You have already submitted a response for '{course_taken}' under {name}. Please select a different course for this submission.")
-            st.info("If you are taking multiple courses, complete this survey separately for each course.")
-        else:
-            if save_to_gsheet(student_data):
-                st.session_state.submitted = True
-                st.rerun()
+    # ============================================
+    # ACTION BUTTONS SECTION
+    # ============================================
+    col_action1, col_action2, col_action3 = st.columns(3)
+    
+    with col_action1:
+        if st.button("Submit Response", type="primary", use_container_width=True):
+            if check_duplicate(name, course_taken):
+                st.error(f"You have already submitted a response for '{course_taken}' under {name}. Please select a different course for this submission.")
+                st.info("If you are taking multiple courses, complete this survey separately for each course.")
             else:
-                st.error("Failed to save. Please ensure Google Sheets setup is correct.")
+                if save_to_gsheet(student_data):
+                    st.session_state.submitted = True
+                    st.rerun()
+                else:
+                    st.error("Failed to save. Please ensure Google Sheets setup is correct.")
 
-    # Allow CSV download for local backup
-    if st.button("Download CSV (Local Backup)"):
-        import pandas as pd
+    with col_action2:
+        if st.button("Clear All Fields", type="secondary", use_container_width=True):
+            # Reset app states
+            st.session_state.submitted = False
+            st.session_state.answers = []
+            st.session_state.profile = None
+            
+            # Delete all widget keys
+            widget_keys_to_clear = [
+                "input_name", "input_username", "input_university", "input_degree", 
+                "input_year", "input_gpa", "input_course_taken", 
+                "c_vis_slider", "c_prac_slider", "c_struct_slider", 
+                "grade_format", "grade_input_num", "grade_input_letter"
+            ]
+            for key in widget_keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # Clear radio buttons
+            keys_to_remove = [k for k in st.session_state.keys() if k.startswith('q_')]
+            for k in keys_to_remove:
+                del st.session_state[k]
+                
+            st.rerun()
+
+    with col_action3:
+        # Allow user to download ALL their historical responses (filtered by username)
+        if username:
+            user_history_df = get_user_history_dataframe(username)
+            if not user_history_df.empty:
+                csv_history = user_history_df.to_csv(index=False)
+                st.download_button(
+                    label="Download My History (CSV)",
+                    data=csv_history,
+                    file_name=f"{username}_history.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            else:
+                st.button("No History Found", disabled=True, use_container_width=True)
+        else:
+            st.button("Enter Username for History", disabled=True, use_container_width=True)
+
+    st.divider()
+
+    # Allow CSV download for the SINGLE current response (backup/local only)
+    if st.button("Download Current Response (Local Backup)", use_container_width=True):
         df = pd.DataFrame([student_data])
         csv = df.to_csv(index=False)
         st.download_button(
             label="Download CSV File",
             data=csv,
-            file_name="my_fslsm_profile.csv",
+            file_name="my_current_fslsm_profile.csv",
             mime="text/csv"
         )
