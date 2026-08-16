@@ -220,13 +220,13 @@ col_rating1, col_rating2, col_rating3 = st.columns(3)
 with col_rating1:
     st.markdown("**Visual Content**")
     st.caption("Diagrams, charts, images, animations")
+    # REMOVED key="c_vis_slider" AND STARTED AT 56 PER YOUR REQUEST
     c_vis_raw = st.slider(
         "Visual Content (%)",
         min_value=0,
         max_value=100,
-        value=50,
-        step=5,
-        key="c_vis_slider"
+        value=56,   # <--- Changed from 50 to 56
+        step=5
     )
     c_vis = c_vis_raw / 100.0
     st.caption(f"Normalized: {c_vis:.2f}")
@@ -234,13 +234,13 @@ with col_rating1:
 with col_rating2:
     st.markdown("**Practical Content**")
     st.caption("Hands-on, lab, programming, projects")
+    # REMOVED key="c_prac_slider"
     c_prac_raw = st.slider(
         "Practical Content (%)",
         min_value=0,
         max_value=100,
         value=50,
-        step=5,
-        key="c_prac_slider"
+        step=5
     )
     c_prac = c_prac_raw / 100.0
     st.caption(f"Normalized: {c_prac:.2f}")
@@ -248,13 +248,13 @@ with col_rating2:
 with col_rating3:
     st.markdown("**Structure/Organization**")
     st.caption("Clear weekly plan, learning objectives")
+    # REMOVED key="c_struct_slider"
     c_struct_raw = st.slider(
         "Structure/Organization (%)",
         min_value=0,
         max_value=100,
         value=50,
-        step=5,
-        key="c_struct_slider"
+        step=5
     )
     c_struct = c_struct_raw / 100.0
     st.caption(f"Normalized: {c_struct:.2f}")
@@ -350,13 +350,8 @@ if st.session_state.submitted:
         # Reset course name (using session state variable, not widget key)
         st.session_state.course_name = ""
         
-        # Reset sliders
-        if "c_vis_slider" in st.session_state:
-            st.session_state.c_vis_slider = 50
-        if "c_prac_slider" in st.session_state:
-            st.session_state.c_prac_slider = 50
-        if "c_struct_slider" in st.session_state:
-            st.session_state.c_struct_slider = 50
+        # Removed the lines resetting c_vis_slider, c_prac_slider, c_struct_slider
+        # to avoid conflict since we removed their widget keys above.
         
         # Reset grade format and inputs
         if "grade_format" in st.session_state:
