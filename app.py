@@ -84,7 +84,7 @@ def check_duplicate(student_id, course_name):
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 
         client = gspread.authorize(creds)
-        sheet = client.open("CogNet_Real_Data").sheet1
+        sheet = client.open("CogNet_Advisory_Data").sheet1
         records = sheet.get_all_values()
 
         if len(records) <= 1:
@@ -134,7 +134,7 @@ def save_to_gsheet(student_data):
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 
         client = gspread.authorize(creds)
-        sheet = client.open("CogNet_Real_Data").sheet1
+        sheet = client.open("CogNet_Advisory_Data").sheet1
 
         # Check if sheet is empty (no headers)
         records = sheet.get_all_values()
